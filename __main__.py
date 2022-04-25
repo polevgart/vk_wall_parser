@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import os
 import vk_api
 from collections import defaultdict
 from tqdm.auto import tqdm
@@ -10,8 +11,6 @@ logger = logging.getLogger(__name__)
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--login", help="Vk bot login")
-    parser.add_argument("--password", help="Vk bot password")
     parser.add_argument("--group_id", help="Vk group id", type=int)
     parser.add_argument("--posts_input_file", help="Instead of loading by bot")
     parser.add_argument("--allow_fields", help="Which fields from post will be saved", nargs="*")
@@ -60,6 +59,14 @@ def save_posts(posts, filename):
         fout.write(json.dumps(posts, ensure_ascii=False, indent=2, sort_keys=True))
 
 
+def getenv(name):
+    res = os.getenv(name)
+    if not res:
+        logger.error("variable %s not set in environment", name)
+        exit(0)
+    return res
+
+
 def main():
     config = parse_args()
     logging.basicConfig(
@@ -67,12 +74,18 @@ def main():
         format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s",
     )
 
+    if not (bool(config.group_id) ^ bool(config.posts_input_file)):
+        logger.error("one parameter is required simultaneously: --group_id or --posts_input_file")
+        return
+
     if config.posts_input_file:
         with open(config.posts_input_file, "r") as fin:
             posts = json.loads(fin.read())
             reposts = []
     else:
-        vk_session = vk_api.VkApi(config.login, config.password)
+        login = getenv("VK_LOGIN")
+        password = getenv("VK_PASSWORD")
+        vk_session = vk_api.VkApi(login, password)
         vk_session.auth()
         vk_tools = vk_api.VkTools(vk_session)
         posts, reposts = download_posts(vk_tools, config.group_id, set(config.allow_fields), config.max_posts)
